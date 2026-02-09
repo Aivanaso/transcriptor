@@ -35,7 +35,7 @@ Press **F12**, speak, press **F12** again and the text is typed into the active 
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/transcriptor.git
+git clone https://github.com/Aivanaso/transcriptor.git
 cd transcriptor
 chmod +x install.sh
 ./install.sh
