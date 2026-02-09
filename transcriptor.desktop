@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Transcriptor
+Comment=Transcripción de voz a texto
+Exec=/home/ivan/Proyectos/transcriptor/venv/bin/transcriptor
+Icon=/home/ivan/Proyectos/transcriptor/transcriptor/assets/icon_idle.png
+Type=Application
+Categories=Utility;Audio;
