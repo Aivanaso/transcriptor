@@ -1,9 +1,10 @@
 """Main application coordinator with state machine."""
 
 import enum
-import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+from plyer import notification
 
 from transcriptor.audio import AudioRecorder, SAMPLE_RATE
 from transcriptor.config import load_config, save_config
@@ -56,12 +57,14 @@ class App:
     def _notify(self, summary: str, body: str = "") -> None:
         if not self.config.get("notifications", True):
             return
-        cmd = ["notify-send", "-a", "Transcriptor", summary]
-        if body:
-            cmd.append(body)
         try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
+            notification.notify(
+                title=summary,
+                message=body,
+                app_name="Transcriptor",
+                timeout=5,
+            )
+        except Exception:
             pass
 
     def _load_model(self) -> None:
@@ -130,7 +133,7 @@ class App:
 
     def _on_settings(self) -> None:
         """Open the settings dialog (called from tray menu)."""
-        # Import here to avoid GTK init issues in non-main threads
+        # Import here to avoid circular imports
         from transcriptor.settings_dialog import show_settings_dialog
         show_settings_dialog(self.config, self._apply_settings)
 

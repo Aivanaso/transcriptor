@@ -13,7 +13,8 @@ dependencies = [
     "pynput>=1.7.6",
     "pystray>=0.19.0",
     "Pillow>=10.0.0",
-    "PyGObject>=3.42.0",
+    "plyer>=2.1.0",
+    "customtkinter>=5.2.0",
     "numpy>=1.24.0",
 ]
 

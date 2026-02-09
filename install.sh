@@ -8,13 +8,10 @@ DESKTOP_FILE="$HOME/.local/share/applications/transcriptor.desktop"
 
 echo "==> [1/4] Instalando dependencias del sistema..."
 sudo apt install -y \
-    python3-pip python3-venv \
+    python3-pip python3-venv python3-tk \
     libportaudio2 portaudio19-dev \
     xdotool xclip \
-    libcairo2-dev pkg-config python3-dev \
-    libgirepository-2.0-dev libgirepository1.0-dev gir1.2-gtk-3.0 \
-    gir1.2-appindicator3-0.1 gir1.2-ayatanaappindicator3-0.1 \
-    libnotify-bin
+    gir1.2-appindicator3-0.1 gir1.2-ayatanaappindicator3-0.1
 
 echo ""
 echo "==> [2/4] Creando entorno virtual..."

@@ -1,10 +1,12 @@
-"""GTK 3 settings dialog for Transcriptor."""
+"""CustomTkinter settings dialog for Transcriptor."""
 
+import threading
 from typing import Callable
 
-import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
+import customtkinter as ctk
+
+ctk.set_appearance_mode("system")
+ctk.set_default_color_theme("blue")
 
 MODELS = ["tiny", "base", "small", "medium", "large-v3"]
 
@@ -21,106 +23,118 @@ LANGUAGES = {
 }
 
 
-class SettingsDialog(Gtk.Window):
-    """Settings window for Transcriptor."""
+class SettingsDialog:
+    """Settings window for Transcriptor using CustomTkinter."""
 
     def __init__(self, config: dict, on_save: Callable[[dict], None]):
-        super().__init__(title="Transcriptor - Configuración")
         self._config = config.copy()
         self._on_save = on_save
         self._capturing_hotkey = False
+        self._lang_codes = list(LANGUAGES.keys())
+        self._lang_labels = [f"{LANGUAGES[c]} ({c})" for c in self._lang_codes]
 
-        self.set_default_size(400, 350)
-        self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_border_width(16)
+        self._root = ctk.CTk()
+        self._root.title("Transcriptor - Configuración")
+        self._root.geometry("420x400")
+        self._root.resizable(False, False)
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.add(vbox)
+        frame = ctk.CTkFrame(self._root, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Model
-        vbox.pack_start(self._label("Modelo de Whisper"), False, False, 0)
-        self._model_combo = Gtk.ComboBoxText()
-        for m in MODELS:
-            self._model_combo.append_text(m)
-        self._model_combo.set_active(MODELS.index(config.get("model_size", "small")))
-        vbox.pack_start(self._model_combo, False, False, 0)
+        ctk.CTkLabel(frame, text="Modelo de Whisper", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            anchor="w"
+        )
+        self._model_var = ctk.StringVar(value=config.get("model_size", "small"))
+        ctk.CTkOptionMenu(frame, variable=self._model_var, values=MODELS).pack(
+            fill="x", pady=(4, 12)
+        )
 
         # Language
-        vbox.pack_start(self._label("Idioma"), False, False, 0)
-        self._lang_combo = Gtk.ComboBoxText()
-        lang_codes = list(LANGUAGES.keys())
-        for code in lang_codes:
-            self._lang_combo.append_text(f"{LANGUAGES[code]} ({code})")
+        ctk.CTkLabel(frame, text="Idioma", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            anchor="w"
+        )
         current_lang = config.get("language", "es")
-        if current_lang in lang_codes:
-            self._lang_combo.set_active(lang_codes.index(current_lang))
-        else:
-            self._lang_combo.set_active(0)
-        self._lang_codes = lang_codes
-        vbox.pack_start(self._lang_combo, False, False, 0)
+        current_idx = self._lang_codes.index(current_lang) if current_lang in self._lang_codes else 0
+        self._lang_var = ctk.StringVar(value=self._lang_labels[current_idx])
+        ctk.CTkOptionMenu(frame, variable=self._lang_var, values=self._lang_labels).pack(
+            fill="x", pady=(4, 12)
+        )
 
         # Hotkey
-        vbox.pack_start(self._label("Tecla de grabación"), False, False, 0)
-        self._hotkey_button = Gtk.Button(label=config.get("hotkey", "Key.f12"))
-        self._hotkey_button.connect("clicked", self._on_hotkey_capture)
-        vbox.pack_start(self._hotkey_button, False, False, 0)
+        ctk.CTkLabel(frame, text="Tecla de grabación", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            anchor="w"
+        )
+        self._hotkey_var = ctk.StringVar(value=config.get("hotkey", "Key.f12"))
+        self._hotkey_button = ctk.CTkButton(
+            frame,
+            textvariable=self._hotkey_var,
+            command=self._on_hotkey_capture,
+            fg_color="gray30",
+            hover_color="gray40",
+        )
+        self._hotkey_button.pack(fill="x", pady=(4, 12))
 
-        # Auto-paste toggle
-        self._auto_paste_switch = Gtk.CheckButton(label="Pegar texto automáticamente")
-        self._auto_paste_switch.set_active(config.get("auto_paste", True))
-        vbox.pack_start(self._auto_paste_switch, False, False, 0)
+        # Auto-paste
+        self._auto_paste_var = ctk.BooleanVar(value=config.get("auto_paste", True))
+        ctk.CTkCheckBox(frame, text="Pegar texto automáticamente", variable=self._auto_paste_var).pack(
+            anchor="w", pady=(0, 4)
+        )
 
-        # Notifications toggle
-        self._notif_switch = Gtk.CheckButton(label="Mostrar notificaciones")
-        self._notif_switch.set_active(config.get("notifications", True))
-        vbox.pack_start(self._notif_switch, False, False, 0)
+        # Notifications
+        self._notif_var = ctk.BooleanVar(value=config.get("notifications", True))
+        ctk.CTkCheckBox(frame, text="Mostrar notificaciones", variable=self._notif_var).pack(
+            anchor="w", pady=(0, 16)
+        )
 
         # Buttons
-        btn_box = Gtk.Box(spacing=8)
-        save_btn = Gtk.Button(label="Guardar")
-        save_btn.get_style_context().add_class("suggested-action")
-        save_btn.connect("clicked", self._on_save_clicked)
-        cancel_btn = Gtk.Button(label="Cancelar")
-        cancel_btn.connect("clicked", lambda _: self.close())
-        btn_box.pack_end(save_btn, False, False, 0)
-        btn_box.pack_end(cancel_btn, False, False, 0)
-        vbox.pack_end(btn_box, False, False, 0)
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.pack(fill="x")
+        ctk.CTkButton(
+            btn_frame, text="Guardar", command=self._on_save_clicked, width=120
+        ).pack(side="right")
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancelar",
+            command=self._root.destroy,
+            width=100,
+            fg_color="gray30",
+            hover_color="gray40",
+        ).pack(side="right", padx=(0, 8))
 
-        self.connect("key-press-event", self._on_key_press)
+        self._root.bind("<KeyPress>", self._on_key_press)
 
-    def _label(self, text: str) -> Gtk.Label:
-        label = Gtk.Label(label=text, xalign=0)
-        label.set_markup(f"<b>{text}</b>")
-        return label
-
-    def _on_hotkey_capture(self, button) -> None:
+    def _on_hotkey_capture(self) -> None:
         self._capturing_hotkey = True
-        button.set_label("Pulsa una tecla...")
+        self._hotkey_var.set("Pulsa una tecla...")
+        self._hotkey_button.configure(fg_color="#b5651d", hover_color="#c47a2a")
 
-    def _on_key_press(self, widget, event) -> bool:
+    def _on_key_press(self, event) -> None:
         if not self._capturing_hotkey:
-            return False
+            return
         self._capturing_hotkey = False
-        key_name = Gdk.keyval_name(event.keyval)
-        # Map GDK key names to pynput format
-        pynput_key = f"Key.{key_name.lower()}"
-        self._hotkey_button.set_label(pynput_key)
+        keysym = event.keysym
+        pynput_key = f"Key.{keysym.lower()}"
+        self._hotkey_var.set(pynput_key)
         self._config["hotkey"] = pynput_key
-        return True
+        self._hotkey_button.configure(fg_color="gray30", hover_color="gray40")
 
-    def _on_save_clicked(self, button) -> None:
-        self._config["model_size"] = MODELS[self._model_combo.get_active()]
-        self._config["language"] = self._lang_codes[self._lang_combo.get_active()]
-        self._config["auto_paste"] = self._auto_paste_switch.get_active()
-        self._config["notifications"] = self._notif_switch.get_active()
+    def _on_save_clicked(self) -> None:
+        self._config["model_size"] = self._model_var.get()
+        self._config["language"] = self._lang_codes[self._lang_labels.index(self._lang_var.get())]
+        self._config["auto_paste"] = self._auto_paste_var.get()
+        self._config["notifications"] = self._notif_var.get()
         self._on_save(self._config)
-        self.close()
+        self._root.destroy()
+
+    def run(self) -> None:
+        self._root.mainloop()
 
 
 def show_settings_dialog(config: dict, on_save: Callable[[dict], None]) -> None:
-    """Show the settings dialog. Must be called from any thread - uses GLib.idle_add."""
-    def _show():
+    """Show the settings dialog in a new thread (customtkinter runs its own mainloop)."""
+    def _run():
         dialog = SettingsDialog(config, on_save)
-        dialog.show_all()
-        return False  # remove from idle
-    GLib.idle_add(_show)
+        dialog.run()
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
