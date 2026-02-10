@@ -9,6 +9,7 @@ DESKTOP_FILE="$HOME/.local/share/applications/transcriptor.desktop"
 echo "==> [1/4] Instalando dependencias del sistema..."
 sudo apt install -y \
     python3-pip python3-venv python3-tk \
+    python3-gi python3-gi-cairo \
     libportaudio2 portaudio19-dev \
     xdotool xclip \
     libdbus-1-dev python3-dbus \
@@ -16,7 +17,7 @@ sudo apt install -y \
 
 echo ""
 echo "==> [2/4] Creando entorno virtual..."
-python3 -m venv "$VENV_DIR"
+python3 -m venv --system-site-packages "$VENV_DIR"
 
 echo ""
 echo "==> [3/4] Instalando Transcriptor..."
