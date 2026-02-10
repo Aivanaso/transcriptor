@@ -37,7 +37,7 @@ class SettingsDialog:
 
         self._root = ctk.CTk()
         self._root.title("Transcriptor - Configuración")
-        self._root.geometry("420x480")
+        self._root.geometry("420x560")
         self._root.resizable(False, False)
 
         frame = ctk.CTkFrame(self._root, fg_color="transparent")
@@ -100,7 +100,20 @@ class SettingsDialog:
         # Auto-paste
         self._auto_paste_var = ctk.BooleanVar(value=config.get("auto_paste", True))
         ctk.CTkCheckBox(frame, text="Pegar texto automáticamente", variable=self._auto_paste_var).pack(
-            anchor="w", pady=(0, 4)
+            anchor="w", pady=(0, 12)
+        )
+
+        # Paste shortcut
+        ctk.CTkLabel(frame, text="Atajo de pegado", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            anchor="w"
+        )
+        self._paste_labels = ["Auto (detectar terminal)", "Ctrl+V", "Ctrl+Shift+V"]
+        self._paste_values = ["auto", "ctrl+v", "ctrl+shift+v"]
+        current_paste = config.get("paste_shortcut", "auto")
+        current_paste_idx = self._paste_values.index(current_paste) if current_paste in self._paste_values else 0
+        self._paste_var = ctk.StringVar(value=self._paste_labels[current_paste_idx])
+        ctk.CTkOptionMenu(frame, variable=self._paste_var, values=self._paste_labels).pack(
+            fill="x", pady=(4, 12)
         )
 
         # Notifications
@@ -146,6 +159,7 @@ class SettingsDialog:
         self._config["language"] = self._lang_codes[self._lang_labels.index(self._lang_var.get())]
         self._config["auto_paste"] = self._auto_paste_var.get()
         self._config["notifications"] = self._notif_var.get()
+        self._config["paste_shortcut"] = self._paste_values[self._paste_labels.index(self._paste_var.get())]
 
         # Audio device: None for default, int index for specific device
         device_label = self._device_var.get()

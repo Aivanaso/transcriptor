@@ -13,6 +13,7 @@ DEFAULT_CONFIG = {
     "compute_type": "int8",
     "device": "cpu",
     "audio_device": None,
+    "paste_shortcut": "auto",
 }
 
 

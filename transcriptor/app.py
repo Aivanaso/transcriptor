@@ -132,7 +132,7 @@ class App:
             print(f"[app] Transcribed: {text}")
 
             if self.config.get("auto_paste", True):
-                inject_text(text)
+                inject_text(text, paste_shortcut=self.config.get("paste_shortcut", "auto"))
 
             self._notify("Transcripción", text[:200])
         except Exception as e:
