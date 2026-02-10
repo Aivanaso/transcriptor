@@ -49,10 +49,7 @@ class HotkeyListener:
                 self._release_timer = None
             if not self._pressed:
                 self._pressed = True
-                print("[hotkey] PRESS (real)")
                 self._on_press_cb()
-            else:
-                print("[hotkey] press (repeat, ignored)")
         except Exception as e:
             print(f"[hotkey] Error in on_press callback: {e}")
 
@@ -73,7 +70,6 @@ class HotkeyListener:
         self._release_timer = None
         self._pressed = False
         try:
-            print("[hotkey] RELEASE (real)")
             self._on_release_cb()
         except Exception as e:
             print(f"[hotkey] Error in on_release callback: {e}")

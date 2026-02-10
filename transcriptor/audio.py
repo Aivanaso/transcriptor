@@ -142,12 +142,10 @@ class AudioRecorder:
         try:
             if self._cached_rate is not None and self._device == self._cached_device:
                 self._capture_rate = self._cached_rate
-                print(f"[audio] Using cached rate: {self._capture_rate} Hz (device={self._device})")
             else:
                 self._capture_rate = self._negotiate_sample_rate()
                 self._cached_rate = self._capture_rate
                 self._cached_device = self._device
-                print(f"[audio] Negotiated rate: {self._capture_rate} Hz (device={self._device})")
         except RuntimeError:
             if self._device is not None:
                 logger.warning("Device %s failed, trying fallback devices", self._device)
@@ -187,13 +185,7 @@ class AudioRecorder:
             return None
 
         audio = np.concatenate(self._chunks, axis=0).flatten()
-        n_chunks = len(self._chunks)
         self._chunks = []
-
-        raw_duration = len(audio) / self._capture_rate
-        raw_max_amp = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
-        print(f"[audio] Raw: {n_chunks} chunks, {len(audio)} samples, "
-              f"{raw_duration:.2f}s, max_amp={raw_max_amp:.4f}")
 
         # Trim initial ~100ms to discard PipeWire stream-open clicks
         trim_samples = int(self._capture_rate * 0.1)
@@ -203,23 +195,23 @@ class AudioRecorder:
         if self._capture_rate != TARGET_RATE:
             audio = self._resample(audio, self._capture_rate, TARGET_RATE)
 
-        final_duration = len(audio) / TARGET_RATE
-        final_max_amp = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
-        print(f"[audio] Final: {len(audio)} samples at {TARGET_RATE} Hz, "
-              f"{final_duration:.2f}s, max_amp={final_max_amp:.4f}")
+        # Normalize to [-1, 1] — Whisper expects float32 in this range.
+        # Safe after trim (no PipeWire click inflating the peak).
+        max_val = np.max(np.abs(audio))
+        if max_val > 0:
+            audio = audio / max_val
 
         return audio
 
     @staticmethod
     def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
-        """Resample audio from from_rate to to_rate using scipy."""
-        from scipy.signal import resample
+        """Resample audio using polyphase filter (better for non-integer ratios)."""
+        from math import gcd
 
-        num_samples = int(len(audio) * to_rate / from_rate)
-        logger.info("Resampling: %d Hz → %d Hz (%d → %d samples)", from_rate, to_rate, len(audio), num_samples)
-        resampled = resample(audio, num_samples).astype(np.float32)
+        from scipy.signal import resample_poly
 
-        # Clip to [-1, 1] without destroying dynamic range
-        resampled = np.clip(resampled, -1.0, 1.0)
-
-        return resampled
+        ratio_gcd = gcd(from_rate, to_rate)
+        up = to_rate // ratio_gcd
+        down = from_rate // ratio_gcd
+        logger.info("Resampling: %d Hz → %d Hz (up=%d, down=%d)", from_rate, to_rate, up, down)
+        return resample_poly(audio, up, down).astype(np.float32)

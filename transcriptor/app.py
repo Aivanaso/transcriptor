@@ -82,7 +82,6 @@ class App:
 
     def _on_hotkey_press(self) -> None:
         with self._lock:
-            print(f"[app] on_press → state={self._state.value}")
             if self._state == State.IDLE:
                 self._start_recording()
             elif self._state == State.LOADING:
@@ -92,7 +91,6 @@ class App:
 
     def _on_hotkey_release(self) -> None:
         with self._lock:
-            print(f"[app] on_release → state={self._state.value}")
             if self._state == State.RECORDING:
                 self._stop_and_transcribe()
 

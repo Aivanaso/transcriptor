@@ -37,7 +37,7 @@ class Transcriber:
             silence,
             language="es",
             vad_filter=True,
-            vad_parameters={"threshold": 0.3, "min_speech_duration_ms": 100},
+            vad_parameters={"threshold": 0.2, "min_speech_duration_ms": 100},
         )
         list(segments)
 
