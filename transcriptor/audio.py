@@ -142,10 +142,12 @@ class AudioRecorder:
         try:
             if self._cached_rate is not None and self._device == self._cached_device:
                 self._capture_rate = self._cached_rate
+                print(f"[audio] Using cached rate: {self._capture_rate} Hz (device={self._device})")
             else:
                 self._capture_rate = self._negotiate_sample_rate()
                 self._cached_rate = self._capture_rate
                 self._cached_device = self._device
+                print(f"[audio] Negotiated rate: {self._capture_rate} Hz (device={self._device})")
         except RuntimeError:
             if self._device is not None:
                 logger.warning("Device %s failed, trying fallback devices", self._device)
@@ -185,7 +187,13 @@ class AudioRecorder:
             return None
 
         audio = np.concatenate(self._chunks, axis=0).flatten()
+        n_chunks = len(self._chunks)
         self._chunks = []
+
+        raw_duration = len(audio) / self._capture_rate
+        raw_max_amp = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
+        print(f"[audio] Raw: {n_chunks} chunks, {len(audio)} samples, "
+              f"{raw_duration:.2f}s, max_amp={raw_max_amp:.4f}")
 
         # Trim initial ~100ms to discard PipeWire stream-open clicks
         trim_samples = int(self._capture_rate * 0.1)
@@ -194,6 +202,11 @@ class AudioRecorder:
 
         if self._capture_rate != TARGET_RATE:
             audio = self._resample(audio, self._capture_rate, TARGET_RATE)
+
+        final_duration = len(audio) / TARGET_RATE
+        final_max_amp = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
+        print(f"[audio] Final: {len(audio)} samples at {TARGET_RATE} Hz, "
+              f"{final_duration:.2f}s, max_amp={final_max_amp:.4f}")
 
         return audio
 
