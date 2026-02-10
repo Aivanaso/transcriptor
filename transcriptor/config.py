@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     "notifications": True,
     "compute_type": "int8",
     "device": "cpu",
+    "audio_device": None,
 }
 
 

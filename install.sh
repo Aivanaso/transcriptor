@@ -11,6 +11,7 @@ sudo apt install -y \
     python3-pip python3-venv python3-tk \
     libportaudio2 portaudio19-dev \
     xdotool xclip \
+    libdbus-1-dev python3-dbus \
     gir1.2-appindicator3-0.1 gir1.2-ayatanaappindicator3-0.1
 
 echo ""

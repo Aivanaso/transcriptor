@@ -5,6 +5,8 @@ from typing import Callable
 
 import customtkinter as ctk
 
+from transcriptor.audio import get_input_devices
+
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
 
@@ -35,7 +37,7 @@ class SettingsDialog:
 
         self._root = ctk.CTk()
         self._root.title("Transcriptor - Configuración")
-        self._root.geometry("420x400")
+        self._root.geometry("420x480")
         self._root.resizable(False, False)
 
         frame = ctk.CTkFrame(self._root, fg_color="transparent")
@@ -58,6 +60,24 @@ class SettingsDialog:
         current_idx = self._lang_codes.index(current_lang) if current_lang in self._lang_codes else 0
         self._lang_var = ctk.StringVar(value=self._lang_labels[current_idx])
         ctk.CTkOptionMenu(frame, variable=self._lang_var, values=self._lang_labels).pack(
+            fill="x", pady=(4, 12)
+        )
+
+        # Audio device
+        ctk.CTkLabel(frame, text="Dispositivo de audio", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            anchor="w"
+        )
+        self._devices = get_input_devices()
+        device_labels = ["Por defecto (sistema)"] + [d["name"] for d in self._devices]
+        current_device = config.get("audio_device")
+        current_device_label = "Por defecto (sistema)"
+        if current_device is not None:
+            for d in self._devices:
+                if d["index"] == current_device:
+                    current_device_label = d["name"]
+                    break
+        self._device_var = ctk.StringVar(value=current_device_label)
+        ctk.CTkOptionMenu(frame, variable=self._device_var, values=device_labels).pack(
             fill="x", pady=(4, 12)
         )
 
@@ -124,6 +144,17 @@ class SettingsDialog:
         self._config["language"] = self._lang_codes[self._lang_labels.index(self._lang_var.get())]
         self._config["auto_paste"] = self._auto_paste_var.get()
         self._config["notifications"] = self._notif_var.get()
+
+        # Audio device: None for default, int index for specific device
+        device_label = self._device_var.get()
+        if device_label == "Por defecto (sistema)":
+            self._config["audio_device"] = None
+        else:
+            for d in self._devices:
+                if d["name"] == device_label:
+                    self._config["audio_device"] = d["index"]
+                    break
+
         self._on_save(self._config)
         self._root.destroy()
 

@@ -38,6 +38,10 @@ class Transcriber:
             task="transcribe",
             beam_size=5,
             vad_filter=True,
+            vad_parameters={
+                "threshold": 0.3,
+                "min_speech_duration_ms": 100,
+            },
         )
         text = " ".join(segment.text.strip() for segment in segments)
         return text.strip()

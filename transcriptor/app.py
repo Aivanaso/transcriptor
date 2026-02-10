@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from plyer import notification
 
-from transcriptor.audio import AudioRecorder, SAMPLE_RATE
+from transcriptor.audio import AudioRecorder, TARGET_RATE
 from transcriptor.config import load_config, save_config
 from transcriptor.hotkey import HotkeyListener
 from transcriptor.text_input import inject_text
@@ -36,7 +36,7 @@ class App:
             device=self.config["device"],
             compute_type=self.config["compute_type"],
         )
-        self.audio = AudioRecorder()
+        self.audio = AudioRecorder(device=self.config.get("audio_device"))
         self.hotkey = HotkeyListener(self.config["hotkey"], self._on_hotkey)
         self.tray = TrayIcon(
             on_settings=self._on_settings,
@@ -103,7 +103,7 @@ class App:
             self._set_state(State.IDLE)
             return
         # Ignore audio shorter than 0.5s to avoid Whisper hallucinations
-        min_samples = int(SAMPLE_RATE * 0.5)
+        min_samples = int(TARGET_RATE * 0.5)
         if len(audio_data) < min_samples:
             self._notify("Transcriptor", "Audio demasiado corto.")
             self._set_state(State.IDLE)
@@ -141,6 +141,7 @@ class App:
         """Apply new settings from the dialog."""
         old_model = self.config["model_size"]
         old_hotkey = self.config["hotkey"]
+        old_audio_device = self.config.get("audio_device")
 
         self.config = new_config
         save_config(new_config)
@@ -153,6 +154,10 @@ class App:
         # Update hotkey if changed
         if new_config["hotkey"] != old_hotkey:
             self.hotkey.update_key(new_config["hotkey"])
+
+        # Update audio device if changed
+        if new_config.get("audio_device") != old_audio_device:
+            self.audio.set_device(new_config.get("audio_device"))
 
     def _reload_model(self, model_size: str) -> None:
         try:
