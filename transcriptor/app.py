@@ -91,7 +91,10 @@ class App:
         try:
             self.audio.start_recording()
             self._set_state(State.RECORDING)
-            self._notify("Grabando", "Pulsa F12 para detener.")
+            if self.audio.fallback_used:
+                self._notify("Grabando", "Dispositivo no disponible, usando micrófono por defecto.")
+            else:
+                self._notify("Grabando", "Pulsa F12 para detener.")
         except Exception as e:
             print(f"[app] Error starting recording: {e}")
             self._notify("Error", f"No se pudo iniciar la grabación: {e}")

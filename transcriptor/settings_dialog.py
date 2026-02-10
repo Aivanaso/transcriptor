@@ -68,13 +68,15 @@ class SettingsDialog:
             anchor="w"
         )
         self._devices = get_input_devices()
-        device_labels = ["Por defecto (sistema)"] + [d["name"] for d in self._devices]
+        device_labels = ["Por defecto (sistema)"] + [
+            f"{d['name']} ({int(d['default_samplerate'])} Hz)" for d in self._devices
+        ]
         current_device = config.get("audio_device")
         current_device_label = "Por defecto (sistema)"
         if current_device is not None:
             for d in self._devices:
                 if d["index"] == current_device:
-                    current_device_label = d["name"]
+                    current_device_label = f"{d['name']} ({int(d['default_samplerate'])} Hz)"
                     break
         self._device_var = ctk.StringVar(value=current_device_label)
         ctk.CTkOptionMenu(frame, variable=self._device_var, values=device_labels).pack(
@@ -150,8 +152,10 @@ class SettingsDialog:
         if device_label == "Por defecto (sistema)":
             self._config["audio_device"] = None
         else:
+            # Strip " (48000 Hz)" suffix to get the raw device name
+            selected_name = device_label.rsplit(" (", 1)[0]
             for d in self._devices:
-                if d["name"] == device_label:
+                if d["name"] == selected_name:
                     self._config["audio_device"] = d["index"]
                     break
 

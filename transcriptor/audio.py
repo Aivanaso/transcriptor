@@ -1,6 +1,8 @@
 """Audio recording using sounddevice with PipeWire compatibility."""
 
+import contextlib
 import logging
+import os
 
 import numpy as np
 import sounddevice as sd
@@ -8,9 +10,23 @@ import sounddevice as sd
 logger = logging.getLogger(__name__)
 
 TARGET_RATE = 16000
-CANDIDATE_RATES = [16000, 48000, 44100]
+CANDIDATE_RATES = [16000, 48000, 44100, 32000, 22050, 8000, 96000]
 CHANNELS = 1
 DTYPE = "float32"
+
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    """Redirect fd 2 to /dev/null to silence PortAudio C-level error messages."""
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    old_stderr_fd = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 2)
+        yield
+    finally:
+        os.dup2(old_stderr_fd, 2)
+        os.close(devnull_fd)
+        os.close(old_stderr_fd)
 
 
 def get_input_devices() -> list[dict]:
@@ -36,45 +52,71 @@ class AudioRecorder:
 
     def __init__(self, device: int | str | None = None):
         self._device = device
+        self._original_device = device
         self._chunks: list[np.ndarray] = []
         self._stream: sd.InputStream | None = None
         self._recording = False
         self._capture_rate: int = TARGET_RATE
+        self._fallback_used = False
 
     @property
     def is_recording(self) -> bool:
         return self._recording
+
+    @property
+    def fallback_used(self) -> bool:
+        """True if the last recording fell back to a different device."""
+        return self._fallback_used
 
     def set_device(self, device: int | str | None) -> None:
         """Change the input device. Takes effect on the next recording."""
         if self._recording:
             logger.warning("Changing device while recording — will apply on next recording")
         self._device = device
+        self._original_device = device
 
     def _negotiate_sample_rate(self) -> int:
         """Find a working sample rate for the current device.
 
-        Tries CANDIDATE_RATES in order (16kHz first for zero-overhead).
+        Tries the device's default_samplerate first, then CANDIDATE_RATES.
         Returns the first rate that works, or raises RuntimeError.
         """
-        for rate in CANDIDATE_RATES:
+        rates = list(CANDIDATE_RATES)
+
+        try:
+            dev_info = sd.query_devices(self._device)
+            dev_default = int(dev_info["default_samplerate"])
+            if dev_default in rates:
+                rates.remove(dev_default)
+            rates.insert(0, dev_default)
+        except Exception:
+            pass
+
+        for rate in rates:
+            if self._try_sample_rate(rate):
+                return rate
+
+        raise RuntimeError(
+            f"No supported sample rate found for device {self._device}. "
+            f"Tried: {rates}"
+        )
+
+    def _try_sample_rate(self, rate: int) -> bool:
+        """Test if a sample rate works for the current device, suppressing stderr."""
+        with _suppress_stderr():
             try:
-                test_stream = sd.InputStream(
+                stream = sd.InputStream(
                     samplerate=rate,
                     channels=CHANNELS,
                     dtype=DTYPE,
                     device=self._device,
                 )
-                test_stream.close()
+                stream.close()
                 logger.info("Using capture rate: %d Hz (device=%s)", rate, self._device)
-                return rate
+                return True
             except sd.PortAudioError:
                 logger.debug("Rate %d Hz not supported by device %s", rate, self._device)
-                continue
-        raise RuntimeError(
-            f"No supported sample rate found for device {self._device}. "
-            f"Tried: {CANDIDATE_RATES}"
-        )
+                return False
 
     def _audio_callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
         if status:
@@ -82,11 +124,35 @@ class AudioRecorder:
         self._chunks.append(indata.copy())
 
     def start_recording(self) -> None:
-        """Open an input stream and start recording."""
+        """Open an input stream and start recording.
+
+        If the configured device fails completely, falls back to "pulse"
+        and then to the system default.
+        """
         if self._recording:
             return
         self._chunks = []
-        self._capture_rate = self._negotiate_sample_rate()
+        self._fallback_used = False
+        self._device = self._original_device
+
+        try:
+            self._capture_rate = self._negotiate_sample_rate()
+        except RuntimeError:
+            if self._device is not None:
+                logger.warning("Device %s failed, trying fallback devices", self._device)
+                for fallback in ("pulse", None):
+                    try:
+                        self._device = fallback
+                        self._capture_rate = self._negotiate_sample_rate()
+                        self._fallback_used = True
+                        break
+                    except RuntimeError:
+                        continue
+                else:
+                    raise RuntimeError("No working audio input device found")
+            else:
+                raise
+
         self._stream = sd.InputStream(
             samplerate=self._capture_rate,
             channels=CHANNELS,
