@@ -51,13 +51,15 @@ class AudioRecorder:
     """Records audio from an input device with automatic sample rate negotiation."""
 
     def __init__(self, device: int | str | None = None):
-        self._device = device
-        self._original_device = device
+        self._device = device if device is not None else "pulse"
+        self._original_device = self._device
         self._chunks: list[np.ndarray] = []
         self._stream: sd.InputStream | None = None
         self._recording = False
         self._capture_rate: int = TARGET_RATE
         self._fallback_used = False
+        self._cached_rate: int | None = None
+        self._cached_device: int | str | None = None
 
     @property
     def is_recording(self) -> bool:
@@ -72,8 +74,10 @@ class AudioRecorder:
         """Change the input device. Takes effect on the next recording."""
         if self._recording:
             logger.warning("Changing device while recording — will apply on next recording")
-        self._device = device
-        self._original_device = device
+        self._device = device if device is not None else "pulse"
+        self._original_device = self._device
+        self._cached_rate = None
+        self._cached_device = None
 
     def _negotiate_sample_rate(self) -> int:
         """Find a working sample rate for the current device.
@@ -136,7 +140,12 @@ class AudioRecorder:
         self._device = self._original_device
 
         try:
-            self._capture_rate = self._negotiate_sample_rate()
+            if self._cached_rate is not None and self._device == self._cached_device:
+                self._capture_rate = self._cached_rate
+            else:
+                self._capture_rate = self._negotiate_sample_rate()
+                self._cached_rate = self._capture_rate
+                self._cached_device = self._device
         except RuntimeError:
             if self._device is not None:
                 logger.warning("Device %s failed, trying fallback devices", self._device)
@@ -178,6 +187,11 @@ class AudioRecorder:
         audio = np.concatenate(self._chunks, axis=0).flatten()
         self._chunks = []
 
+        # Trim initial ~100ms to discard PipeWire stream-open clicks
+        trim_samples = int(self._capture_rate * 0.1)
+        if len(audio) > trim_samples:
+            audio = audio[trim_samples:]
+
         if self._capture_rate != TARGET_RATE:
             audio = self._resample(audio, self._capture_rate, TARGET_RATE)
 
@@ -192,9 +206,7 @@ class AudioRecorder:
         logger.info("Resampling: %d Hz → %d Hz (%d → %d samples)", from_rate, to_rate, len(audio), num_samples)
         resampled = resample(audio, num_samples).astype(np.float32)
 
-        # Normalize to [-1, 1] to avoid clipping
-        max_val = np.max(np.abs(resampled))
-        if max_val > 0:
-            resampled = resampled / max_val
+        # Clip to [-1, 1] without destroying dynamic range
+        resampled = np.clip(resampled, -1.0, 1.0)
 
         return resampled

@@ -68,11 +68,11 @@ class SettingsDialog:
             anchor="w"
         )
         self._devices = get_input_devices()
-        device_labels = ["Por defecto (sistema)"] + [
+        device_labels = ["Por defecto (PipeWire/Pulse)"] + [
             f"{d['name']} ({int(d['default_samplerate'])} Hz)" for d in self._devices
         ]
         current_device = config.get("audio_device")
-        current_device_label = "Por defecto (sistema)"
+        current_device_label = "Por defecto (PipeWire/Pulse)"
         if current_device is not None:
             for d in self._devices:
                 if d["index"] == current_device:
@@ -149,7 +149,7 @@ class SettingsDialog:
 
         # Audio device: None for default, int index for specific device
         device_label = self._device_var.get()
-        if device_label == "Por defecto (sistema)":
+        if device_label == "Por defecto (PipeWire/Pulse)":
             self._config["audio_device"] = None
         else:
             # Strip " (48000 Hz)" suffix to get the raw device name

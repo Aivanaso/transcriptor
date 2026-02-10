@@ -37,7 +37,11 @@ class App:
             compute_type=self.config["compute_type"],
         )
         self.audio = AudioRecorder(device=self.config.get("audio_device"))
-        self.hotkey = HotkeyListener(self.config["hotkey"], self._on_hotkey)
+        self.hotkey = HotkeyListener(
+            self.config["hotkey"],
+            on_press=self._on_hotkey_press,
+            on_release=self._on_hotkey_release,
+        )
         self.tray = TrayIcon(
             on_settings=self._on_settings,
             on_quit=self._on_quit,
@@ -71,21 +75,24 @@ class App:
         try:
             self.transcriber.load_model()
             self._set_state(State.IDLE)
-            self._notify("Transcriptor", "Modelo cargado. Pulsa F12 para grabar.")
+            self._notify("Transcriptor", "Modelo cargado. Mantén F12 para grabar.")
         except Exception as e:
             print(f"[app] Error loading model: {e}")
             self._notify("Transcriptor - Error", f"No se pudo cargar el modelo: {e}")
 
-    def _on_hotkey(self) -> None:
+    def _on_hotkey_press(self) -> None:
         with self._lock:
             if self._state == State.IDLE:
                 self._start_recording()
-            elif self._state == State.RECORDING:
-                self._stop_and_transcribe()
-            elif self._state == State.PROCESSING:
-                self._notify("Transcriptor", "Procesando... espera un momento.")
             elif self._state == State.LOADING:
-                self._notify("Transcriptor", "Cargando modelo... espera un momento.")
+                self._notify("Transcriptor", "Cargando modelo... espera.")
+            elif self._state == State.PROCESSING:
+                self._notify("Transcriptor", "Procesando... espera.")
+
+    def _on_hotkey_release(self) -> None:
+        with self._lock:
+            if self._state == State.RECORDING:
+                self._stop_and_transcribe()
 
     def _start_recording(self) -> None:
         try:
@@ -94,7 +101,7 @@ class App:
             if self.audio.fallback_used:
                 self._notify("Grabando", "Dispositivo no disponible, usando micrófono por defecto.")
             else:
-                self._notify("Grabando", "Pulsa F12 para detener.")
+                self._notify("Grabando", "Suelta F12 para transcribir.")
         except Exception as e:
             print(f"[app] Error starting recording: {e}")
             self._notify("Error", f"No se pudo iniciar la grabación: {e}")

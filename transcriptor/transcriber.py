@@ -25,7 +25,21 @@ class Transcriber:
             device=self._device,
             compute_type=self._compute_type,
         )
-        print("[transcriber] Model loaded.")
+        print("[transcriber] Model loaded. Warming up VAD...")
+        self._warmup_vad()
+        print("[transcriber] VAD ready.")
+
+    def _warmup_vad(self) -> None:
+        """Run a dummy transcription with silence to initialize Silero VAD."""
+        silence = np.zeros(16000, dtype=np.float32)
+        # transcribe() returns a generator — must consume it to trigger VAD init
+        segments, _ = self._model.transcribe(
+            silence,
+            language="es",
+            vad_filter=True,
+            vad_parameters={"threshold": 0.3, "min_speech_duration_ms": 100},
+        )
+        list(segments)
 
     def transcribe(self, audio_data: np.ndarray, language: str = "es") -> str:
         """Transcribe a float32 numpy array and return the text."""
