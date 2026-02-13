@@ -1,7 +1,9 @@
 """Main application coordinator with state machine."""
 
 import enum
+import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from plyer import notification
@@ -12,6 +14,8 @@ from transcriptor.hotkey import HotkeyListener
 from transcriptor.text_input import inject_text
 from transcriptor.transcriber import Transcriber
 from transcriptor.tray import TrayIcon
+
+logger = logging.getLogger(__name__)
 
 
 class State(enum.Enum):
@@ -37,10 +41,12 @@ class App:
             compute_type=self.config["compute_type"],
         )
         self.audio = AudioRecorder(device=self.config.get("audio_device"))
+        self._recording_start_time: float = 0.0
         self.hotkey = HotkeyListener(
             self.config["hotkey"],
             on_press=self._on_hotkey_press,
             on_release=self._on_hotkey_release,
+            mode=self.config.get("hotkey_mode", "toggle"),
         )
         self.tray = TrayIcon(
             on_settings=self._on_settings,
@@ -77,13 +83,15 @@ class App:
             self._set_state(State.IDLE)
             self._notify("Transcriptor", "Modelo cargado. Mantén F12 para grabar.")
         except Exception as e:
-            print(f"[app] Error loading model: {e}")
+            logger.error("Error loading model: %s", e)
             self._notify("Transcriptor - Error", f"No se pudo cargar el modelo: {e}")
 
     def _on_hotkey_press(self) -> None:
         with self._lock:
             if self._state == State.IDLE:
                 self._start_recording()
+            elif self._state == State.RECORDING and self.hotkey.mode == "toggle":
+                self._stop_and_transcribe()
             elif self._state == State.LOADING:
                 self._notify("Transcriptor", "Cargando modelo... espera.")
             elif self._state == State.PROCESSING:
@@ -91,19 +99,31 @@ class App:
 
     def _on_hotkey_release(self) -> None:
         with self._lock:
-            if self._state == State.RECORDING:
-                self._stop_and_transcribe()
+            if self._state != State.RECORDING:
+                return
+            # Push-to-talk: ignore taps shorter than 300ms
+            elapsed = time.monotonic() - self._recording_start_time
+            if elapsed < 0.3:
+                logger.info("Tap too short (%.0f ms), ignoring", elapsed * 1000)
+                self.audio.stop_recording()
+                self._notify("Transcriptor", "Audio demasiado corto.")
+                self._set_state(State.IDLE)
+                return
+            self._stop_and_transcribe()
 
     def _start_recording(self) -> None:
         try:
             self.audio.start_recording()
+            self._recording_start_time = time.monotonic()
             self._set_state(State.RECORDING)
             if self.audio.fallback_used:
                 self._notify("Grabando", "Dispositivo no disponible, usando micrófono por defecto.")
+            elif self.hotkey.mode == "toggle":
+                self._notify("Grabando", "Pulsa F12 de nuevo para transcribir.")
             else:
                 self._notify("Grabando", "Suelta F12 para transcribir.")
         except Exception as e:
-            print(f"[app] Error starting recording: {e}")
+            logger.error("Error starting recording: %s", e)
             self._notify("Error", f"No se pudo iniciar la grabación: {e}")
 
     def _stop_and_transcribe(self) -> None:
@@ -129,14 +149,14 @@ class App:
                 self._set_state(State.IDLE)
                 return
 
-            print(f"[app] Transcribed: {text}")
+            logger.info("Transcribed: %s", text)
 
             if self.config.get("auto_paste", True):
                 inject_text(text, paste_shortcut=self.config.get("paste_shortcut", "auto"))
 
             self._notify("Transcripción", text[:200])
         except Exception as e:
-            print(f"[app] Transcription error: {e}")
+            logger.error("Transcription error: %s", e)
             self._notify("Error de transcripción", str(e))
         finally:
             self._set_state(State.IDLE)
@@ -152,6 +172,7 @@ class App:
         old_model = self.config["model_size"]
         old_hotkey = self.config["hotkey"]
         old_audio_device = self.config.get("audio_device")
+        old_hotkey_mode = self.config.get("hotkey_mode", "toggle")
 
         self.config = new_config
         save_config(new_config)
@@ -165,6 +186,11 @@ class App:
         if new_config["hotkey"] != old_hotkey:
             self.hotkey.update_key(new_config["hotkey"])
 
+        # Update hotkey mode if changed
+        new_hotkey_mode = new_config.get("hotkey_mode", "toggle")
+        if new_hotkey_mode != old_hotkey_mode:
+            self.hotkey.update_mode(new_hotkey_mode)
+
         # Update audio device if changed
         if new_config.get("audio_device") != old_audio_device:
             self.audio.set_device(new_config.get("audio_device"))
@@ -176,12 +202,12 @@ class App:
             self._set_state(State.IDLE)
             self._notify("Transcriptor", f"Modelo '{model_size}' cargado.")
         except Exception as e:
-            print(f"[app] Error reloading model: {e}")
+            logger.error("Error reloading model: %s", e)
             self._notify("Error", f"No se pudo cambiar el modelo: {e}")
 
     def _on_quit(self) -> None:
         """Clean shutdown."""
-        print("[app] Shutting down...")
+        logger.info("Shutting down...")
         self.hotkey.stop()
         if self.audio.is_recording:
             self.audio.stop_recording()
@@ -191,5 +217,5 @@ class App:
     def run(self) -> None:
         """Start the app. Blocks on tray icon loop."""
         self.hotkey.start()
-        print("[app] Transcriptor running. Press F12 to record.")
+        logger.info("Transcriptor running. Press F12 to record.")
         self.tray.run()  # blocks

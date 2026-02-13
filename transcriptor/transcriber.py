@@ -1,7 +1,11 @@
 """Speech-to-text transcription using faster-whisper."""
 
+import logging
+
 import numpy as np
 from faster_whisper import WhisperModel
+
+logger = logging.getLogger(__name__)
 
 
 class Transcriber:
@@ -19,15 +23,15 @@ class Transcriber:
 
     def load_model(self) -> None:
         """Download (if needed) and load the Whisper model. This is slow (~5-10s)."""
-        print(f"[transcriber] Loading model '{self._model_size}' on {self._device} ({self._compute_type})...")
+        logger.info("Loading model '%s' on %s (%s)...", self._model_size, self._device, self._compute_type)
         self._model = WhisperModel(
             self._model_size,
             device=self._device,
             compute_type=self._compute_type,
         )
-        print("[transcriber] Model loaded. Warming up VAD...")
+        logger.info("Model loaded. Warming up VAD...")
         self._warmup_vad()
-        print("[transcriber] VAD ready.")
+        logger.info("VAD ready.")
 
     def _warmup_vad(self) -> None:
         """Run a dummy transcription with silence to initialize Silero VAD."""

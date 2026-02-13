@@ -1,13 +1,16 @@
-"""Global hotkey listener using pynput — push-to-talk mode."""
+"""Global hotkey listener using pynput — toggle and push-to-talk modes."""
 
+import logging
 import threading
 from typing import Callable
 
 from pynput import keyboard
 
+logger = logging.getLogger(__name__)
+
 # Time to wait before treating a release as real (seconds).
-# X11 auto-repeat fires release+press pairs <10ms apart; 50ms is safe.
-_RELEASE_DEBOUNCE = 0.05
+# X11 auto-repeat fires release+press pairs <10ms apart; 100ms is safe for KDE.
+_RELEASE_DEBOUNCE = 0.1
 
 
 def _parse_key(key_string: str) -> keyboard.Key | keyboard.KeyCode:
@@ -19,11 +22,10 @@ def _parse_key(key_string: str) -> keyboard.Key | keyboard.KeyCode:
 
 
 class HotkeyListener:
-    """Push-to-talk: press to start recording, release to stop.
+    """Hotkey listener with two modes:
 
-    X11 key repeat generates synthetic ``release → press`` pairs while a key
-    is held down.  We debounce releases with a short timer: if a press arrives
-    within ``_RELEASE_DEBOUNCE`` seconds, the release was fake and we cancel it.
+    - **toggle**: press once to start recording, press again to stop.
+    - **push-to-talk**: hold to record, release to stop (with X11 debounce).
     """
 
     def __init__(
@@ -31,39 +33,83 @@ class HotkeyListener:
         key_string: str,
         on_press: Callable[[], None],
         on_release: Callable[[], None],
+        mode: str = "toggle",
     ):
         self._key = _parse_key(key_string)
         self._on_press_cb = on_press
         self._on_release_cb = on_release
+        self._mode = mode
         self._pressed = False
         self._release_timer: threading.Timer | None = None
         self._listener: keyboard.Listener | None = None
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def update_mode(self, mode: str) -> None:
+        """Change hotkey mode at runtime (toggle / push-to-talk)."""
+        if mode not in ("toggle", "push-to-talk"):
+            logger.warning("Unknown hotkey mode '%s', ignoring", mode)
+            return
+        logger.info("Hotkey mode changed: %s -> %s", self._mode, mode)
+        self._mode = mode
+        self._pressed = False
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
 
     def _on_press(self, key) -> None:
         try:
             if key != self._key:
                 return
-            # Cancel pending release — it was X11 auto-repeat, not real
-            if self._release_timer is not None:
-                self._release_timer.cancel()
-                self._release_timer = None
-            if not self._pressed:
-                self._pressed = True
-                self._on_press_cb()
+
+            if self._mode == "toggle":
+                self._on_press_toggle()
+            else:
+                self._on_press_push_to_talk()
         except Exception as e:
-            print(f"[hotkey] Error in on_press callback: {e}")
+            logger.error("Error in on_press callback: %s", e)
+
+    def _on_press_toggle(self) -> None:
+        """Toggle mode: each press fires the press callback (app decides action)."""
+        # Cancel any pending debounce timer from a previous push-to-talk session
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
+
+        # Ignore X11 auto-repeat: only fire on the first press
+        if not self._pressed:
+            self._pressed = True
+            self._on_press_cb()
+
+    def _on_press_push_to_talk(self) -> None:
+        """Push-to-talk: press starts recording, with X11 debounce."""
+        # Cancel pending release — it was X11 auto-repeat, not real
+        if self._release_timer is not None:
+            self._release_timer.cancel()
+            self._release_timer = None
+        if not self._pressed:
+            self._pressed = True
+            self._on_press_cb()
 
     def _on_release(self, key) -> None:
         try:
-            if key == self._key and self._pressed:
-                # Delay: real releases have no press following within 50ms
+            if key != self._key or not self._pressed:
+                return
+
+            if self._mode == "toggle":
+                # Toggle mode: release resets pressed flag, no callback
+                self._pressed = False
+            else:
+                # Push-to-talk: debounce to filter X11 auto-repeat
                 self._release_timer = threading.Timer(
                     _RELEASE_DEBOUNCE, self._handle_real_release,
                 )
                 self._release_timer.daemon = True
                 self._release_timer.start()
         except Exception as e:
-            print(f"[hotkey] Error in on_release callback: {e}")
+            logger.error("Error in on_release callback: %s", e)
 
     def _handle_real_release(self) -> None:
         """Called after debounce delay — this is a genuine key release."""
@@ -72,7 +118,7 @@ class HotkeyListener:
         try:
             self._on_release_cb()
         except Exception as e:
-            print(f"[hotkey] Error in on_release callback: {e}")
+            logger.error("Error in on_release callback: %s", e)
 
     def start(self) -> None:
         """Start the hotkey listener in a daemon thread."""

@@ -3,6 +3,7 @@
 import contextlib
 import logging
 import os
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -162,15 +163,32 @@ class AudioRecorder:
             else:
                 raise
 
-        self._stream = sd.InputStream(
-            samplerate=self._capture_rate,
-            channels=CHANNELS,
-            dtype=DTYPE,
-            device=self._device,
-            callback=self._audio_callback,
-        )
-        self._stream.start()
+        self._open_stream()
         self._recording = True
+        logger.info(
+            "Recording started: device=%s, rate=%d Hz",
+            self._device, self._capture_rate,
+        )
+
+    def _open_stream(self) -> None:
+        """Open and start the audio stream, with one retry on failure."""
+        for attempt in range(2):
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=self._capture_rate,
+                    channels=CHANNELS,
+                    dtype=DTYPE,
+                    device=self._device,
+                    callback=self._audio_callback,
+                )
+                self._stream.start()
+                return
+            except sd.PortAudioError as e:
+                if attempt == 0:
+                    logger.warning("Stream open failed, retrying in 200ms: %s", e)
+                    time.sleep(0.2)
+                else:
+                    raise
 
     def stop_recording(self) -> np.ndarray | None:
         """Stop recording and return audio as a 1-D float32 array at TARGET_RATE."""

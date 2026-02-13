@@ -1,7 +1,6 @@
 """System tray backend using AppIndicator3 + GTK3 (Linux native)."""
 
 import signal
-import threading
 from typing import Callable
 
 import gi
@@ -59,7 +58,7 @@ class TrayIcon:
         self._menu.show_all()
 
     def _settings_clicked(self, widget) -> None:
-        threading.Thread(target=self._on_settings, daemon=True).start()
+        self._on_settings()
 
     def _quit_clicked(self, widget) -> None:
         self._on_quit()

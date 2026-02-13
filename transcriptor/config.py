@@ -14,6 +14,7 @@ DEFAULT_CONFIG = {
     "device": "cpu",
     "audio_device": None,
     "paste_shortcut": "auto",
+    "hotkey_mode": "toggle",
 }
 
 

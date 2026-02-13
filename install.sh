@@ -8,7 +8,7 @@ DESKTOP_FILE="$HOME/.local/share/applications/transcriptor.desktop"
 
 echo "==> [1/4] Instalando dependencias del sistema..."
 sudo apt install -y \
-    python3-pip python3-venv python3-tk \
+    python3-pip python3-venv \
     python3-gi python3-gi-cairo \
     libportaudio2 portaudio19-dev \
     xdotool xclip \
